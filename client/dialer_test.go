@@ -11,6 +11,7 @@ import (
 func TestDialer(t *testing.T) {
 	dialer := &Dialer{
 		Dialer:           &net.Dialer{},
+		nameserverAddr:   "8.8.8.8:53",
 		keepIdleTime:     3,
 		keepIntervalTime: 3,
 		keepFailAfter:    3,

@@ -1,6 +1,8 @@
 package client
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -25,9 +27,7 @@ func TestClient(t *testing.T) {
 	}
 
 	client, err := NewClient(config)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	t.Run("IP address", func(t *testing.T) {
 		testMsg := "hello"
@@ -76,5 +76,34 @@ func TestClient(t *testing.T) {
 		require.NoError(t, err)
 
 		_, err = client.Do(request)
+	})
+
+	t.Run("https", func(t *testing.T) {
+		var err error
+		var request *http.Request
+
+		var buf = &bytes.Buffer{}
+
+		blob := "{'foo':'bar'}"
+		buf.WriteString(blob)
+
+		request, err = http.NewRequest(http.MethodPost, "https://httpbin.org/post", buf)
+		require.NoError(t, err)
+
+		request.Header.Set("Content-Type", "application/json")
+
+		resp, err := client.Do(request)
+		require.NoError(t, err)
+
+		defer resp.Body.Close()
+
+		m := struct {
+			Data string `json:"data"`
+		}{}
+
+		err = json.NewDecoder(resp.Body).Decode(&m)
+		require.NoError(t, err)
+
+		require.Equal(t, m.Data, blob)
 	})
 }

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net"
 	"time"
+
+	"github.com/miekg/dns"
 )
 
 // Dialer is a custom dialer with a DialContext method
@@ -14,6 +16,7 @@ type Dialer struct {
 	keepIdleTime     int
 	keepIntervalTime int
 	keepFailAfter    int
+	nameserverAddr   string
 
 	// read/write timeout is set if kernel do not support TCP keep-alive
 	readTimeout  int
@@ -21,9 +24,67 @@ type Dialer struct {
 }
 
 func (d *Dialer) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
-	conn, err := d.Dialer.DialContext(ctx, network, address)
+	var IPAddr, IPAddrSecondary string
+	var host, port string
+	var err error
+
+	// if host is already address
+	// then skip DNS address resolution
+	if ip := net.ParseIP(address); ip != nil {
+		IPAddr = address
+	} else {
+		host, port, err = net.SplitHostPort(address)
+		if err != nil {
+			return nil, err
+		}
+
+		addrs, err := net.DefaultResolver.LookupHost(ctx, host)
+		if err != nil {
+			return nil, err
+		}
+
+		// if address is not found using local resolver
+		// get address from remote name server
+		if err != nil || len(addrs) == 0 {
+			client := new(dns.Client)
+			msg := new(dns.Msg)
+
+			msg.SetQuestion(dns.Fqdn(address), dns.TypeA)
+
+			reply, _, err := client.Exchange(msg, d.nameserverAddr)
+			if err != nil {
+				return nil, err
+			}
+
+			if reply.Rcode != dns.RcodeSuccess {
+				return nil, nil
+			}
+
+			for _, a := range reply.Answer {
+				// first field is IP
+				IPAddr = dns.Field(a, 1)
+				break
+			}
+		} else {
+			// if we have multiple addresses
+			// choose one randomly
+			if len(addrs) > 1 {
+				IPAddr = getRandomAddr(addrs)
+				IPAddrSecondary = getRandomAddr(addrs)
+			} else {
+				IPAddr = addrs[0]
+			}
+
+		}
+	}
+
+	println(IPAddr, IPAddrSecondary, port)
+	conn, err := d.Dialer.DialContext(ctx, network, IPAddr+":"+port)
 	if err != nil {
-		return conn, err
+		conn, err = d.Dialer.DialContext(ctx, network, IPAddrSecondary+":"+port)
+		if err != nil {
+			return conn, err
+		}
 	}
 
 	err = setTCPKeepAlive(conn, d.keepIdleTime, d.keepIntervalTime, d.keepFailAfter)
