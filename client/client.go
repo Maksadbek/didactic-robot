@@ -11,16 +11,18 @@ import (
 )
 
 type Config struct {
-	ResolveTimeout      int
-	TLSHandshakeTimeout int
-	NameserverAddr      string
+	ResolveTimeout      time.Duration
+	TLSHandshakeTimeout time.Duration
 	ConnectionTimeout   time.Duration
+
 	TCPKeepIdleTime     time.Duration
 	TCPKeepIntervalTime time.Duration
 	TCPKeepFailAfter    time.Duration
 
 	ReadTimeout  time.Duration
 	WriteTimeout time.Duration
+
+	NameserverAddr string
 }
 
 type Client struct {
@@ -37,7 +39,7 @@ func NewClient(config Config) (*Client, error) {
 		writeTimeout:     seconds(config.WriteTimeout),
 
 		Dialer: &net.Dialer{
-			Timeout: time.Millisecond * time.Duration(config.ResolveTimeout),
+			Timeout: config.ConnectionTimeout,
 		},
 	}
 
@@ -48,16 +50,31 @@ func NewClient(config Config) (*Client, error) {
 		},
 	}
 
-	return &Client{httpClient: &httpClient}, nil
+	return &Client{
+		httpClient: &httpClient,
+		config:     config,
+	}, nil
 }
 
 func (c *Client) Do(r *http.Request) (*http.Response, error) {
-
 	ctx := context.Background()
-
-	addrs, err := net.DefaultResolver.LookupHost(ctx, r.URL.Host)
+	ctx, cancel := context.WithTimeout(ctx, c.config.ResolveTimeout)
+	defer cancel()
 
 	var addr string
+
+	// if host is already address
+	// then skip DNS address resolution
+	_, err := net.ResolveTCPAddr("tcp", r.Host)
+	if err == nil {
+		return c.httpClient.Do(r)
+	}
+
+	addrs, err := net.DefaultResolver.LookupHost(ctx, r.Host)
+	if err != nil {
+		return nil, err
+	}
+
 	// if address is not found using local resolver
 	// get address from remote name server
 	if err != nil || len(addrs) == 0 {
@@ -68,7 +85,7 @@ func (c *Client) Do(r *http.Request) (*http.Response, error) {
 
 		reply, _, err := client.Exchange(msg, c.config.NameserverAddr)
 		if err != nil {
-			return nil, nil
+			return nil, err
 		}
 
 		if reply.Rcode != dns.RcodeSuccess {
@@ -76,6 +93,7 @@ func (c *Client) Do(r *http.Request) (*http.Response, error) {
 		}
 
 		for _, a := range reply.Answer {
+			// first field is IP
 			addr = dns.Field(a, 1)
 			break
 		}
