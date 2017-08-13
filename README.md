@@ -74,4 +74,32 @@ Usage of ./drobot:
     	set TLS handshake timeout
   -write-timeout duration
     	set write timeout if OS do not support TCP Keep-alive, in seconds (default 1m0s)
+
+maxs-MacBook-Pro:drobot max$ cat inputs.json 
+{
+	"foo": "bar",
+	"bar": "baz"
+}
+
+maxs-MacBook-Pro:drobot max$ ./drobot 
+DROBOT
+{
+  "args": {}, 
+  "data": "{\n\t\"foo\": \"bar\",\n\t\"bar\": \"baz\"\n}\n", 
+  "files": {}, 
+  "form": {}, 
+  "headers": {
+    "Accept-Encoding": "gzip", 
+    "Connection": "close", 
+    "Content-Length": "33", 
+    "Host": "httpbin.org", 
+    "User-Agent": "Go-http-client/1.1"
+  }, 
+  "json": {
+    "bar": "baz", 
+    "foo": "bar"
+  }, 
+  "origin": "46.39.248.63", 
+  "url": "https://httpbin.org/post"
+}
 ```
