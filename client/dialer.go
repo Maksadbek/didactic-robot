@@ -81,6 +81,10 @@ func (d *Dialer) DialContext(ctx context.Context, network, address string) (net.
 	println(IPAddr, IPAddrSecondary, port)
 	conn, err := d.Dialer.DialContext(ctx, network, IPAddr+":"+port)
 	if err != nil {
+		if IPAddrSecondary == "" {
+			return conn, err
+		}
+
 		conn, err = d.Dialer.DialContext(ctx, network, IPAddrSecondary+":"+port)
 		if err != nil {
 			return conn, err
@@ -98,8 +102,6 @@ func (d *Dialer) DialContext(ctx context.Context, network, address string) (net.
 		if err != nil {
 			return conn, err
 		}
-
-		return conn, err
 	}
 
 	return conn, nil
