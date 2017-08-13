@@ -46,3 +46,32 @@ if err != nil {
 // do whatever with resp...
 
 ```
+
+## CLI
+Very simple cli that sends file contents to given endpoint
+```
+maxs-MacBook-Pro:drobot max$ ./drobot -h
+Usage of ./drobot:
+  -connection-timeout duration
+    	set connection timeout
+  -endpoint string
+    	endpoint where data will be sent (default "https://httpbin.org/post")
+  -filename string
+    	file which content will be sent with POST request (default "inputs.json")
+  -nameserver-addr string
+    	set up default fallback address (default "8.8.8.8")
+  -read-timeout duration
+    	set read timeout if OS do not support TCP Keep-alive, in seconds (default 1m0s)
+  -resolve-timeout duration
+    	set resolve timeout
+  -tcp-keep-failafter duration
+    	set TCP keepalive fail after value (default 3s)
+  -tcp-keep-idle duration
+    	set TCP keepalive idle in seconds (default 1s)
+  -tcp-keep-interval duration
+    	set TCP keepalive interval, in seconds (default 1s)
+  -tls-handshake-timeout duration
+    	set TLS handshake timeout
+  -write-timeout duration
+    	set write timeout if OS do not support TCP Keep-alive, in seconds (default 1m0s)
+```
