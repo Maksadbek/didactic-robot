@@ -24,70 +24,56 @@ type Dialer struct {
 }
 
 func (d *Dialer) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
-	var IPAddr, IPAddrSecondary string
 	var host, port string
 	var err error
 
+	addrs := []string{}
+
+	host, port, err = net.SplitHostPort(address)
+	if err != nil {
+		return nil, err
+	}
+
 	// if host is already address
 	// then skip DNS address resolution
-	if ip := net.ParseIP(address); ip != nil {
-		IPAddr = address
+	if ip := net.ParseIP(host); ip != nil {
+		addrs = append(addrs, host)
 	} else {
-		host, port, err = net.SplitHostPort(address)
+		addrs, err = getHostAddrs(ctx, host, d.nameserverAddr)
 		if err != nil {
 			return nil, err
-		}
-
-		addrs, err := net.DefaultResolver.LookupHost(ctx, host)
-		if err != nil {
-			return nil, err
-		}
-
-		// if address is not found using local resolver
-		// get address from remote name server
-		if err != nil || len(addrs) == 0 {
-			client := new(dns.Client)
-			msg := new(dns.Msg)
-
-			msg.SetQuestion(dns.Fqdn(address), dns.TypeA)
-
-			reply, _, err := client.Exchange(msg, d.nameserverAddr)
-			if err != nil {
-				return nil, err
-			}
-
-			if reply.Rcode != dns.RcodeSuccess {
-				return nil, nil
-			}
-
-			for _, a := range reply.Answer {
-				// first field is IP
-				IPAddr = dns.Field(a, 1)
-				break
-			}
-		} else {
-			// if we have multiple addresses
-			// choose one randomly
-			if len(addrs) > 1 {
-				IPAddr = getRandomAddr(addrs)
-				IPAddrSecondary = getRandomAddr(addrs)
-			} else {
-				IPAddr = addrs[0]
-			}
-
 		}
 	}
 
-	conn, err := d.Dialer.DialContext(ctx, network, IPAddr+":"+port)
-	if err != nil {
-		if IPAddrSecondary == "" {
-			return conn, err
+	var prevAddr string
+	var conn net.Conn
+	for i := 0; i < 2; i++ {
+		// if it is second try and address slices are only one
+		// break, second try will not make it successful
+		if len(addrs) < 2 && i > 0 {
+			break
 		}
 
-		conn, err = d.Dialer.DialContext(ctx, network, IPAddrSecondary+":"+port)
-		if err != nil {
-			return conn, err
+		addr := getRandomAddr(addrs)
+
+		// if prev addr and current is the same
+		// then try one more time
+		if prevAddr == addr {
+			addr = getRandomAddr(addrs)
 		}
+
+		conn, err = d.Dialer.DialContext(ctx, network, addr+":"+port)
+		if err != nil {
+			continue
+		} else {
+			break
+		}
+	}
+
+	// all tries are failed
+	// return error
+	if err != nil {
+		return nil, err
 	}
 
 	err = setTCPKeepAlive(conn, d.keepIdleTime, d.keepIntervalTime, d.keepFailAfter)
@@ -141,4 +127,40 @@ func setTCPKeepAlive(c net.Conn, idleTime, intervalTime, count int) error {
 func seconds(d time.Duration) int {
 	d += (time.Second - time.Nanosecond)
 	return int(d.Seconds())
+}
+
+func getHostAddrs(ctx context.Context, host, ns string) ([]string, error) {
+	addrs, err := net.DefaultResolver.LookupHost(ctx, host)
+	if err == nil {
+		return addrs, nil
+	}
+
+	// if address is not found using local resolver
+	// get address from remote name server
+	fmt.Printf("failed to resolve host '%s' with local resolver, searching in %s", host, ns)
+
+	client := new(dns.Client)
+	msg := new(dns.Msg)
+
+	msg.SetQuestion(dns.Fqdn(host), dns.TypeA)
+
+	reply, _, err := client.Exchange(msg, ns)
+	if err != nil {
+		return nil, err
+	}
+
+	if reply.Rcode != dns.RcodeSuccess {
+		return nil, nil
+	}
+
+	if len(reply.Answer) < 1 {
+		return nil, fmt.Errorf("can't resolv domain: %s", host)
+	}
+
+	// get IP addresses
+	for _, a := range reply.Answer {
+		addrs = append(addrs, dns.Field(a, 1))
+	}
+
+	return addrs, nil
 }
