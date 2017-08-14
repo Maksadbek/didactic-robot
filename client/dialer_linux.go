@@ -1,11 +1,16 @@
 package client
 
+import (
+	"os"
+	"syscall"
+)
+
 func setSockKeepIdleTime(fd, secs int) error {
 	err := os.NewSyscallError("setsockopt", syscall.SetsockoptInt(
 		fd,
 		syscall.IPPROTO_TCP,
-		syscall.TCP_KEEPALIVE,
-		seconds(idleTime),
+		syscall.TCP_KEEPIDLE,
+		secs,
 	))
 
 	return err
@@ -16,7 +21,7 @@ func setSockKeepIntervalTime(fd, secs int) error {
 		fd,
 		syscall.IPPROTO_TCP,
 		syscall.TCP_KEEPINTVL,
-		seconds(intervalTime),
+		secs,
 	))
 
 	return err
@@ -26,8 +31,8 @@ func setSockKeepCount(fd, secs int) error {
 	err := os.NewSyscallError("setsockopt", syscall.SetsockoptInt(
 		fd,
 		syscall.IPPROTO_TCP,
-		syscall.TCP_KEEPCount,
-		seconds(intervalTime),
+		syscall.TCP_KEEPCNT,
+		secs,
 	))
 
 	return err
