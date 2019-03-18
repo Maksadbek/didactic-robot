@@ -1,4 +1,6 @@
-# didactic-robot
+Interview assignment by Okmeter
+
+# Go HTTPS Client
 Utility to send metrics over HTTP(S)
 
 ## What it can do
